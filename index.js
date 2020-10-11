@@ -1,129 +1,209 @@
+const { backedUpFiles } = require('./fresh');
+const db = require('diskdb');
 const express = require('express');
 const cors = require('cors');
 const app = express();
-const mongoose = require('mongoose');
 
-mongoose.connect('mongodb://localhost:27017/ourDatabase', { 
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useCreateIndex: true, 
-});
-
-const mdb = mongoose.connection;
-mdb.on('error', (err) => {
-    console.error(err);
-});
-mdb.on('open', () => {
-    console.log('Connected to mongoDb');
-})
-
-// schema for mongoDb
-const CoffeeorderModel = require('./models/Coffeeorders');
-
-// express middleware
 app.use(express.json());
 app.use(cors({
     origin: '*'
 }));
 
-// lowercaseOrder function will make all the orders in lowercase for the database for easier matching.
-function lowercaseOrder(obj) {
-    console.log(`lowercasing order: ${JSON.stringify(obj)}`);
-    return {
-        coffee: obj.coffee? obj.coffee.toLowerCase() : undefined,
-        emailAddress: obj.emailAddress ? obj.emailAddress.toLowerCase() : undefined,
-        flavor: obj.flavor? obj.flavor.toLowerCase() : undefined,
-        size: obj.flavor? obj.flavor.toLowerCase() : undefined,
-        strength: parseInt(obj.strength),
-    };
-}
-
-// all orders
-app.get('/coffeeorders', async (req, res) => {
-    let allOrders = await CoffeeorderModel.find(); // 
-    res.json(allOrders);
+app.get('/coffeeorders', (req, res) => {
+    db.connect('./data', ['coffeeorders']);
+    res.json(db.coffeeorders.find());
 });
 
-app.post('/coffeeorders', async (req, res) => {
+app.post('/coffeeorders', (req, res) => {
+    db.connect('./data', ['coffeeorders']);
     try {
-        const lowerCased = lowercaseOrder(req.body);
-        const record = await CoffeeorderModel.create(lowerCased); // mongodb - mongoose: create an object in the collection (returns a promise)
-        res.status(201).json(record);
+        db.coffeeorders.save(req.body);
+        res.sendStatus(201);
     } catch (e) {
         console.log(`API error: ${e}`);
-        res.status(500).json({error: e});
+        res.sendStatus(500);
     }
 });
 
-app.delete('/coffeeorders', async (req, res) => {
-    try {
-        let droppedCollection = await CoffeeorderModel.collection.drop(); // mongodb - mongoose: drop the whole collection (returns a promise)
-        res.status(200).json(droppedCollection);
-        
-    } catch (err) {
-        res.json({ error: err });
-    }
-    
+app.delete('/coffeeorders', (req, res) => {
+    db.connect('./data', ['coffeeorders']);
+    backedUpFiles()
+        .then(() => {
+            res.sendStatus(200);
+        });
 });
 
-app.get('/coffeeorders/:emailAddress', async (req, res) => {
-    const emailAddress = req.params.emailAddress ? req.params.emailAddress.toLowerCase() : undefined; // make sure emailAddress is not an empty string.
+// email routes.
+app.get('/coffeeorders/:emailAddress', (req, res) => {
+    const emailAddress = req.params.emailAddress;
     console.log(`looking for: ${emailAddress}`);
-    let record = await CoffeeorderModel.find( { emailAddress: emailAddress } ) // (returns a promise)
-    console.log(`record: ${JSON.stringify(record)}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.find( { emailAddress: emailAddress } );
     if (record) res.status(200).json(record);
     else res.sendStatus(404);
 });
 
-app.put('/coffeeorders/:emailAddress', async (req, res) => {
-    const { emailAddress } = req.params;
-    const {flavor, size, strength, coffee } = req.body;
-    const lowerCasedOrder = lowercaseOrder({ 
-        coffee: coffee, 
-        emailAddress: emailAddress, 
-        flavor: flavor, 
-        size: size, 
-        strength: strength 
-    })
+app.put('/coffeeorders/:emailAddress', (req, res) => {
+    const emailAddress = req.params.emailAddress;
     console.log(`looking for: ${emailAddress}`);
-    try {
-        let record = await CoffeeorderModel.updateOne(  // (returns a promise)
-            { emailAddress: lowerCasedOrder.emailAddress }, 
-            { 
-                $set: lowerCasedOrder,
-                sort: { 
-                    $natural: -1 
-                }
-        });
-        res.status(200).json(record);
-
-    } catch (e) {
-        res.status(500).json({"error": `${e}`});
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { emailAddress: emailAddress } );
+    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    if (record) {
+        try {
+            req.body._id = record._id;
+            db.coffeeorders.remove({ _id: record._id });
+            setTimeout(() => {
+                db.coffeeorders.save(req.body);
+                res.status(200).json(req.body);
+            }, 200);
+        } catch (e) {
+            res.status(500).json({"error": `${e}`});
+        }
     }
-
+    else res.sendStatus(404);
 });
 
-app.delete('/coffeeorders/:emailAddress', async (req, res) => { 
-    const { emailAddress } = req.params; // the :emaiAddress variable will be === req.params 
-    const { flavor, size, strength, coffee } = req.body; // data from the reques's json body can be found in req.body
-    const lowerCasedOrder = lowercaseOrder({ 
-        coffee: coffee, 
-        emailAddress: emailAddress, 
-        flavor: flavor, 
-        size: size, 
-        strength: strength 
-    })
+app.delete('/coffeeorders/:emailAddress', (req, res) => {
+    const emailAddress = req.params.emailAddress;
     console.log(`looking for: ${emailAddress}`);
-
-    try {
-        let record = await CoffeeorderModel.findOneAndDelete( 
-            { emailAddress: lowerCasedOrder.emailAddress }, 
-            { sort: { $natural: -1 } // will delete the last order: https://stackoverflow.com/questions/50568108/removing-latest-document-from-mongo-db-in-single-query
-        });
-        res.status(200).json(record);
-    } catch (e) {
-        res.status(404).json({ error: err });
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { emailAddress: emailAddress } );
+    if (record) {
+        db.coffeeorders.remove( { _id: record._id }, false );
+        res.sendStatus(200);
     }
+    else res.sendStatus(404);
 });
+
+// coffee routes
+app.get('/coffeeorders/:coffee', (req, res) => {
+    const coffee = req.params.coffee;
+    console.log(`looking for: ${coffee}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.find( { coffee: coffee } );
+    if (record) res.status(200).json(record);
+    else res.sendStatus(404);
+});
+
+app.put('/coffeeorders/:coffee', (req, res) => {
+    const coffee = req.params.coffee;
+    console.log(`looking for: ${coffee}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { coffee: coffee } );
+    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    if (record) {
+        try {
+            req.body._id = record._id;
+            db.coffeeorders.remove({ _id: record._id });
+            setTimeout(() => {
+                db.coffeeorders.save(req.body);
+                res.status(200).json(req.body);
+            }, 200);
+        } catch (e) {
+            res.status(500).json({"error": `${e}`});
+        }
+    }
+    else res.sendStatus(404);
+});
+
+app.delete('/coffeeorders/:coffee', (req, res) => {
+    const coffee = req.params.coffee;
+    console.log(`looking for: ${coffee}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { coffee: coffee } );
+    if (record) {
+        db.coffeeorders.remove( { _id: record._id }, false );
+        res.sendStatus(200);
+    }
+    else res.sendStatus(404);
+});
+
+//flavor route
+app.get('/coffeeorders/:flavor', (req, res) => {
+    const coffee = req.params.coffee;
+    console.log(`looking for: ${coffee}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.find( { coffee: coffee } );
+    if (record) res.status(200).json(record);
+    else res.sendStatus(404);
+});
+
+app.put('/coffeeorders/:flavor', (req, res) => {
+    const flavor = req.params.flavor;
+    console.log(`looking for: ${flavor}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { flavor: flavor } );
+    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    if (record) {
+        try {
+            req.body._id = record._id;
+            db.coffeeorders.remove({ _id: record._id });
+            setTimeout(() => {
+                db.coffeeorders.save(req.body);
+                res.status(200).json(req.body);
+            }, 200);
+        } catch (e) {
+            res.status(500).json({"error": `${e}`});
+        }
+    }
+    else res.sendStatus(404);
+});
+
+app.delete('/coffeeorders/:flavor', (req, res) => {
+    const flavor = req.params.flavor;
+    console.log(`looking for: ${flavor}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { flavor: flavor } );
+    if (record) {
+        db.coffeeorders.remove( { _id: record._id }, false );
+        res.sendStatus(200);
+    }
+    else res.sendStatus(404);
+});
+
+//size route
+app.get('/coffeeorders/:size', (req, res) => {
+    const size = req.params.size;
+    console.log(`looking for: ${size}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.find( { size: size } );
+    if (record) res.status(200).json(record);
+    else res.sendStatus(404);
+});
+
+app.put('/coffeeorders/:size', (req, res) => {
+    const size = req.params.size;
+    console.log(`looking for: ${size}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { size: size } );
+    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    if (record) {
+        try {
+            req.body._id = record._id;
+            db.coffeeorders.remove({ _id: record._id });
+            setTimeout(() => {
+                db.coffeeorders.save(req.body);
+                res.status(200).json(req.body);
+            }, 200);
+        } catch (e) {
+            res.status(500).json({"error": `${e}`});
+        }
+    }
+    else res.sendStatus(404);
+});
+
+app.delete('/coffeeorders/:size', (req, res) => {
+    const size = req.params.size;
+    console.log(`looking for: ${size}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.findOne( { size: size } );
+    if (record) {
+        db.coffeeorders.remove( { _id: record._id }, false );
+        res.sendStatus(200);
+    }
+    else res.sendStatus(404);
+});
+
  
-app.listen(3000, '0.0.0.0');
+app.listen(3000);
