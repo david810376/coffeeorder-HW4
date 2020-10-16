@@ -9,6 +9,19 @@ app.use(cors({
     origin: '*'
 }));
 
+// lowercaseOrder function will make all the orders in lowercase for the database for easier matching.
+function lowercaseOrder(obj) {
+    return {
+        coffee: obj.coffee.toLowerCase(),
+        emailAddress: obj.emailAddress.toLowerCase(),
+        flavor: obj.flavor.toLowerCase(),
+        strength: parseInt(obj.strength),
+        size: obj.flavor.toLowerCase(),
+        _id: obj._id
+    };
+}
+
+// all orders
 app.get('/coffeeorders', (req, res) => {
     db.connect('./data', ['coffeeorders']);
     res.json(db.coffeeorders.find());
@@ -17,7 +30,8 @@ app.get('/coffeeorders', (req, res) => {
 app.post('/coffeeorders', (req, res) => {
     db.connect('./data', ['coffeeorders']);
     try {
-        db.coffeeorders.save(req.body);
+        console.log(req.body);
+        db.coffeeorders.save(lowercaseOrder(req.body));
         res.sendStatus(201);
     } catch (e) {
         console.log(`API error: ${e}`);
@@ -35,7 +49,7 @@ app.delete('/coffeeorders', (req, res) => {
 
 // email routes.
 app.get('/coffeeorders/:emailAddress', (req, res) => {
-    const emailAddress = req.params.emailAddress;
+    const emailAddress = req.params.emailAddress ? req.params.emailAddress.toLowerCase() : undefined;
     console.log(`looking for: ${emailAddress}`);
     db.connect('./data', ['coffeeorders']);
     let record = db.coffeeorders.find( { emailAddress: emailAddress } );
@@ -44,7 +58,7 @@ app.get('/coffeeorders/:emailAddress', (req, res) => {
 });
 
 app.put('/coffeeorders/:emailAddress', (req, res) => {
-    const emailAddress = req.params.emailAddress;
+    const emailAddress = req.params.emailAddress ? req.params.emailAddress.toLowerCase() : undefined ;
     console.log(`looking for: ${emailAddress}`);
     db.connect('./data', ['coffeeorders']);
     let record = db.coffeeorders.findOne( { emailAddress: emailAddress } );
@@ -65,7 +79,7 @@ app.put('/coffeeorders/:emailAddress', (req, res) => {
 });
 
 app.delete('/coffeeorders/:emailAddress', (req, res) => {
-    const emailAddress = req.params.emailAddress;
+    const emailAddress = req.params.emailAddress.toLowerCase();
     console.log(`looking for: ${emailAddress}`);
     db.connect('./data', ['coffeeorders']);
     let record = db.coffeeorders.findOne( { emailAddress: emailAddress } );
@@ -76,9 +90,9 @@ app.delete('/coffeeorders/:emailAddress', (req, res) => {
     else res.sendStatus(404);
 });
 
-// coffee routes
-app.get('/coffeeorders/:coffee', (req, res) => {
-    const coffee = req.params.coffee;
+// coffee type orders
+app.get('/coffeeorders/coffee/:coffee', (req, res) => {
+    const coffee = req.params.coffee.toLowerCase();
     console.log(`looking for: ${coffee}`);
     db.connect('./data', ['coffeeorders']);
     let record = db.coffeeorders.find( { coffee: coffee } );
@@ -86,85 +100,75 @@ app.get('/coffeeorders/:coffee', (req, res) => {
     else res.sendStatus(404);
 });
 
-app.put('/coffeeorders/:coffee', (req, res) => {
-    const coffee = req.params.coffee;
+app.delete('/coffeeorders/coffee/:coffee', (req, res) => {
+    const coffee = req.params.coffee.toLowerCase();
     console.log(`looking for: ${coffee}`);
     db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.findOne( { coffee: coffee } );
-    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    let record = db.coffeeorders.find( { coffee: coffee } );
+    console.log(`record: ${JSON.stringify(record)}`);
     if (record) {
-        try {
-            req.body._id = record._id;
-            db.coffeeorders.remove({ _id: record._id });
-            setTimeout(() => {
-                db.coffeeorders.save(req.body);
-                res.status(200).json(req.body);
-            }, 200);
-        } catch (e) {
-            res.status(500).json({"error": `${e}`});
-        }
-    }
-    else res.sendStatus(404);
-});
-
-app.delete('/coffeeorders/:coffee', (req, res) => {
-    const coffee = req.params.coffee;
-    console.log(`looking for: ${coffee}`);
-    db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.findOne( { coffee: coffee } );
-    if (record) {
-        db.coffeeorders.remove( { _id: record._id }, false );
+        db.coffeeorders.remove( { _id: order._id }, false );
         res.sendStatus(200);
     }
     else res.sendStatus(404);
 });
 
-//flavor route
-app.get('/coffeeorders/:flavor', (req, res) => {
-    const coffee = req.params.coffee;
-    console.log(`looking for: ${coffee}`);
+// flavor orders
+app.get('/coffeeorders/flavor/:flavor', (req, res) => {
+    const flavor = req.params.flavor.toLowerCase();
+    console.log(`looking for: ${flavor}`);
     db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.find( { coffee: coffee } );
+    let record = db.coffeeorders.find( { flavor: flavor } );
     if (record) res.status(200).json(record);
     else res.sendStatus(404);
 });
 
-app.put('/coffeeorders/:flavor', (req, res) => {
-    const flavor = req.params.flavor;
+app.delete('/coffeeorders/flavor/:flavor', (req, res) => {
+    const flavor = req.params.flavor.toLowerCase();
     console.log(`looking for: ${flavor}`);
     db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.findOne( { flavor: flavor } );
-    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    let record = db.coffeeorders.find( { flavor: flavor } );
+    console.log(`deleting flavors: ${JSON.stringify(record)}`);
     if (record) {
-        try {
-            req.body._id = record._id;
-            db.coffeeorders.remove({ _id: record._id });
-            setTimeout(() => {
-                db.coffeeorders.save(req.body);
-                res.status(200).json(req.body);
-            }, 200);
-        } catch (e) {
-            res.status(500).json({"error": `${e}`});
-        }
-    }
-    else res.sendStatus(404);
-});
-
-app.delete('/coffeeorders/:flavor', (req, res) => {
-    const flavor = req.params.flavor;
-    console.log(`looking for: ${flavor}`);
-    db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.findOne( { flavor: flavor } );
-    if (record) {
-        db.coffeeorders.remove( { _id: record._id }, false );
+        db.coffeeorders.remove( { flavor: flavor }, true );
         res.sendStatus(200);
     }
     else res.sendStatus(404);
 });
 
-//size route
-app.get('/coffeeorders/:size', (req, res) => {
-    const size = req.params.size;
+// strength orders
+app.get('/coffeeorders/strength/:strength', (req, res) => {
+    const strength = parseInt(req.params.strength);
+    if(!strength) {
+        res.sendStatus(404);
+    }
+    console.log(`looking for: ${strength}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.find( { strength: strength } );
+    if (record) res.status(200).json(record);
+    else res.sendStatus(404);
+});
+
+app.delete('/coffeeorders/strength/:strength', (req, res) => {
+    const strength = parseInt(req.params.strength);
+    if(!strength) {
+        res.sendStatus(404);
+    }
+    console.log(`looking for: ${strength}`);
+    db.connect('./data', ['coffeeorders']);
+    let record = db.coffeeorders.find( { strength: strength } );
+    console.log(`record: ${JSON.stringify(record)}`);
+    if (record) {
+        db.coffeeorders.remove( { _id: order._id }, true );
+        
+        res.sendStatus(200);
+    }
+    else res.sendStatus(404);
+});
+
+// size orders
+app.get('/coffeeorders/size/:size', (req, res) => {
+    const size = req.params.size.toLowerCase();
     console.log(`looking for: ${size}`);
     db.connect('./data', ['coffeeorders']);
     let record = db.coffeeorders.find( { size: size } );
@@ -172,38 +176,17 @@ app.get('/coffeeorders/:size', (req, res) => {
     else res.sendStatus(404);
 });
 
-app.put('/coffeeorders/:size', (req, res) => {
-    const size = req.params.size;
+app.delete('/coffeeorders/size/:size', (req, res) => {
+    const size = req.params.size.toLowerCase();
     console.log(`looking for: ${size}`);
     db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.findOne( { size: size } );
-    console.log(`PUT: ${JSON.stringify(record,null,2)}`);
+    let record = db.coffeeorders.find( { size: size } );
+    console.log(`deleting flavors: ${JSON.stringify(record)}`);
     if (record) {
-        try {
-            req.body._id = record._id;
-            db.coffeeorders.remove({ _id: record._id });
-            setTimeout(() => {
-                db.coffeeorders.save(req.body);
-                res.status(200).json(req.body);
-            }, 200);
-        } catch (e) {
-            res.status(500).json({"error": `${e}`});
-        }
-    }
-    else res.sendStatus(404);
-});
-
-app.delete('/coffeeorders/:size', (req, res) => {
-    const size = req.params.size;
-    console.log(`looking for: ${size}`);
-    db.connect('./data', ['coffeeorders']);
-    let record = db.coffeeorders.findOne( { size: size } );
-    if (record) {
-        db.coffeeorders.remove( { _id: record._id }, false );
+        db.coffeeorders.remove( { size: size }, true );
         res.sendStatus(200);
     }
     else res.sendStatus(404);
 });
-
  
 app.listen(3000);
