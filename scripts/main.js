@@ -11,22 +11,26 @@
   var FormHandler = App.FormHandler;
   var Validation = App.Validation;
   var CheckList = App.CheckList;
+  
+  
   var remoteDS = new RemoteDataStore(SERVER_URL);
   //var webshim = window.webshim;
   var myTruck = new Truck("ncc-1701", remoteDS);
   window.myTruck = myTruck;
   var checkList = new CheckList(CHECKLIST_SELECTOR);
   checkList.addClickHandler(myTruck.deliverOrder.bind(myTruck));
-
   var formHandler = new FormHandler(FORM_SELECTOR);
-  formHandler.addSubmitHandler(function(data) {
-    myTruck.createOrder.call(myTruck, data);
-    checkList.addRow.call(checkList, data);
-  });
 
-  formHandler.addInputHandler(Validation.isCompanyEmail);
-  //webshim.polyfill('from forms-ext');
-  //webshim.setOptions('from',{addValidators: true, lazyCustomMessages: true});
+  formHandler.addSubmitHandler(function(data) {
+        return truck.createOrder.call(truck, data)
+            .then(() => {
+                checkList.addRow.call(checkList, data);
+            }); 
+    });
+    console.log(formHandler);
+
+    formHandler.addInputHandler(Validation.isCompanyEmail);
+    truck.printOrders(checkList.addRow.bind(checkList));
 
 
 })(window);
